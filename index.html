@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>微笑挑戰 🙂</title>
+    <meta property="og:title" content="微笑充電站 🔋">
+    <meta property="og:description" content="給自己 1 分鐘，充滿 100% 的正能量。">
     
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
@@ -22,10 +24,10 @@
         canvas { 
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
             object-fit: cover; 
-            transform: scaleX(-1); /* 鏡像 */
+            transform: scaleX(-1); /* CSS 視覺層鏡像 */
         }
 
-        /* UI 層：改到上方，避開手機底部網址列 */
+        /* UI 層：依據你的要求設定在下方 (80vh) */
         #ui-layer {
             position: absolute; 
             top: 0; 
@@ -36,8 +38,8 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: flex-start; /* 改為靠上對齊 */
-            padding-top: 40vh; /* 避開瀏海與頂部資訊列 */
+            justify-content: flex-start; 
+            padding-top: 80vh; /* 這是你設定的位置 */
             box-sizing: border-box;
             z-index: 10;
         }
@@ -69,6 +71,7 @@
             font-weight: bold;
             text-shadow: 0 2px 4px rgba(0,0,0,0.8);
             letter-spacing: 1px;
+            margin-bottom: 5px;
         }
 
         /* 勝利訊息 */
@@ -88,6 +91,41 @@
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             color: white; font-size: 16px;
         }
+
+        /* --- 新增：按鈕樣式 --- */
+        .btn-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        button {
+            padding: 12px 24px;
+            border-radius: 50px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            transition: transform 0.1s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            z-index: 30; /* 確保按鈕可以點擊 */
+        }
+
+        button:active { transform: scale(0.95); }
+
+        .btn-restart {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid white;
+            color: white;
+        }
+
+        .btn-share {
+            background: #FFD700;
+            color: #000;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+        }
     </style>
 </head>
 <body>
@@ -106,8 +144,17 @@
         </div>
         
         <div id="success-layer">
-            <h1 style="font-size: 60px; margin: 0;">☀️</h1>
-            <h2 style="margin-top: 20px;">你就是自己的太陽</h2>
+            <h1 style="font-size: 30px; margin: 0;">☀️</h1>
+            <h2 style="margin-top: 20px;">Just Smile 😊</h2>
+
+            <div class="btn-group">
+                <button class="btn-restart" onclick="restartGame()">
+                    🔄 再次挑戰
+                </button>
+                <button class="btn-share" onclick="shareGame()">
+                    📤 分享出去
+                </button>
+            </div>
         </div>
     </div>
 
@@ -119,6 +166,7 @@
     const statusText = document.getElementById('status-text');
     const successLayer = document.getElementById('success-layer');
     const loadingDiv = document.getElementById('loading');
+    const uiLayer = document.getElementById('ui-layer');
 
     let smileScore = 0; 
     let gameWon = false;
@@ -177,10 +225,7 @@
         canvasCtx.save();
         canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-        canvasCtx.translate(canvasElement.width, 0);
-        canvasCtx.scale(-1, 1);
-        
-        // 保持比例填滿 (Cover Mode Algorithm)
+        // 保持比例填滿 (Cover Mode)
         const vRatio = videoElement.videoWidth / videoElement.videoHeight;
         const cRatio = canvasElement.width / canvasElement.height;
         let drawW, drawH, startX, startY;
@@ -197,6 +242,7 @@
             startY = 0;
         }
 
+        // 這裡只需要一次鏡像翻轉
         canvasCtx.translate(canvasElement.width, 0);
         canvasCtx.scale(-1, 1);
         canvasCtx.drawImage(results.image, -startX, startY, drawW, drawH);
@@ -206,19 +252,26 @@
             const landmarks = results.multiFaceLandmarks[0];
             const isSmiling = detectSmileStrict(landmarks);
 
-            if (!gameWon) {
-                if (isSmiling) {
-                    // 1分鐘挑戰: 60秒 * 30FPS = 1800幀
-                    // 100 / 1800 = 0.055
+            if (isSmiling) {
+                    // 1分鐘挑戰
                     smileScore += 0.06; 
-                    statusText.innerText = `😁 充電中... ${Math.floor(smileScore)}%`;
+                    
+                    // --- 修改開始：讓文字輪流切換 ---
+                    // 設定 4000 毫秒 (4秒) 為一個循環
+                    // 前 2 秒顯示 "充電中"，後 2 秒顯示 "你笑起來真好看"
+                    if (Date.now() % 4000 < 2000) {
+                        statusText.innerText = `充電中... ${Math.floor(smileScore)}%`;
+                    } else {
+                        statusText.innerText = `你笑起來真好看 ${Math.floor(smileScore)}%`;
+                    }
+                    // --- 修改結束 ---
+
                 } else {
-                    // 懲罰機制: 沒笑扣分 (可調整)
+                    // 緩慢下降 (依你的要求設為 0.1)
                     smileScore -= 0.1; 
-                    statusText.innerText = "😐 請保持微笑！";
+                    statusText.innerText = "請保持微笑！";
                 }
 
-                // 邊界檢查
                 if (smileScore < 0) smileScore = 0;
                 if (smileScore > 100) {
                     smileScore = 100;
@@ -231,19 +284,16 @@
         canvasCtx.restore();
     }
 
-    // 🔥 改良版嚴格偵測
+    // 嚴格微笑偵測
     function detectSmileStrict(landmarks) {
-        // 嘴寬
         const mouthLeft = landmarks[61];
         const mouthRight = landmarks[291];
         const mouthWidth = Math.hypot(mouthLeft.x - mouthRight.x, mouthLeft.y - mouthRight.y);
 
-        // 臉寬 (雙眼距離當作基準)
         const eyeLeft = landmarks[33];
         const eyeRight = landmarks[263];
         const faceWidth = Math.hypot(eyeLeft.x - eyeRight.x, eyeLeft.y - eyeRight.y);
 
-        // 嘴巴開合度 (上唇頂-下唇底) - 用來避免「張嘴講話」被誤判
         const lipTop = landmarks[13];
         const lipBottom = landmarks[14];
         const mouthOpen = Math.hypot(lipTop.x - lipBottom.x, lipTop.y - lipBottom.y);
@@ -251,27 +301,61 @@
         const widthRatio = mouthWidth / faceWidth;
         const openRatio = mouthOpen / faceWidth;
 
-        // 邏輯說明：
-        // 1. widthRatio > 0.6 : 嘴巴要夠寬 (比起上版的 0.5 嚴格很多)
-        // 2. openRatio < 0.25 : 嘴巴不能張太大 (避免大吼大叫被算進去)
+        // 嚴格判定
         return (widthRatio > 0.60); 
     }
 
     function triggerWin() {
         gameWon = true;
         successLayer.style.display = 'flex';
-        statusText.style.display = 'none'; // 隱藏狀態字
-        document.querySelector('.bar-container').style.display = 'none'; // 隱藏進度條
+        uiLayer.style.display = 'none'; // 隱藏遊戲UI
 
         // 彩帶特效
         const duration = 5000;
         const end = Date.now() + duration;
-        
         (function frame() {
             confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#FFF', '#FFD700'] });
             confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#FFF', '#FFD700'] });
             if (Date.now() < end) requestAnimationFrame(frame);
         }());
+    }
+
+    // --- 新增的功能函數 ---
+
+    // 1. 重新開始
+    function restartGame() {
+        smileScore = 0;
+        gameWon = false;
+        
+        successLayer.style.display = 'none';
+        uiLayer.style.display = 'flex'; // 顯示遊戲UI
+        
+        progressBar.style.width = "0%";
+        statusText.innerText = "😐 準備好微笑";
+    }
+
+    // 2. 分享功能
+    async function shareGame() {
+        // !!! 注意 !!!
+        // 當你有 Reels 連結後，請回來把下面這行改成：
+        // const shareUrl = 'https://www.instagram.com/reel/你的影片ID';
+        const shareUrl = window.location.href; // 目前先分享這個網頁自己
+
+        const shareData = {
+            title: '微笑挑戰 🙂',
+            url: shareUrl
+        };
+
+        try {
+            if (navigator.share) {
+                await navigator.share(shareData);
+            } else {
+                await navigator.clipboard.writeText(shareUrl);
+                alert("連結已複製！");
+            }
+        } catch (err) {
+            console.log("分享取消");
+        }
     }
 
     startCamera();
