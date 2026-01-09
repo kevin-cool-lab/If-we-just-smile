@@ -37,7 +37,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: flex-start; /* 改為靠上對齊 */
-            padding-top: 15vh; /* 避開瀏海與頂部資訊列 */
+            padding-top: 40vh; /* 避開瀏海與頂部資訊列 */
             box-sizing: border-box;
             z-index: 10;
         }
@@ -176,6 +176,9 @@
         // 1. 繪製畫面
         canvasCtx.save();
         canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+        canvasCtx.translate(canvasElement.width, 0);
+        canvasCtx.scale(-1, 1);
         
         // 保持比例填滿 (Cover Mode Algorithm)
         const vRatio = videoElement.videoWidth / videoElement.videoHeight;
@@ -211,7 +214,7 @@
                     statusText.innerText = `😁 充電中... ${Math.floor(smileScore)}%`;
                 } else {
                     // 懲罰機制: 沒笑扣分 (可調整)
-                    smileScore -= 0.5; 
+                    smileScore -= 0.1; 
                     statusText.innerText = "😐 請保持微笑！";
                 }
 
