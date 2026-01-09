@@ -12,28 +12,30 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     
     <style>
+        /* CSS Reset */
         body { margin: 0; padding: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
         #container { position: relative; width: 100vw; height: 100vh; }
         
-        /* 隱藏原始影片，只顯示 Canvas */
+        /* 隱藏原始影片 */
         video { position: absolute; opacity: 0; width: 1px; height: 1px; }
         
-        /* Canvas 填滿螢幕 + 鏡像 */
+        /* Canvas 設定 */
         canvas { 
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
             object-fit: cover; 
-            transform: scaleX(-1);
+            /* 注意：這裡把 transform 拿掉了，交給 JS 處理，避免負負得正 */
         }
 
-        /* UI 層設定在下方 */
+        /* UI 層設定：修改為距離底部 25% (中偏下) */
         #ui-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             pointer-events: none;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: flex-start; 
-            padding-top: 80vh; /* 位置設定 */
+            /* 改成靠下對齊，然後往上推 */
+            justify-content: flex-end; 
+            padding-bottom: 60vh; /* 距離底部 25% 的高度，這就是你要的中偏下 */
             box-sizing: border-box;
             z-index: 10;
         }
@@ -59,7 +61,7 @@
             text-shadow: 0 2px 4px rgba(0,0,0,0.8);
             letter-spacing: 1px; margin-bottom: 5px;
             text-align: center;
-            min-height: 24px; /* 防止文字跳動 */
+            min-height: 24px;
         }
 
         #success-layer {
@@ -70,17 +72,14 @@
             z-index: 20; color: white; text-align: center;
         }
 
-        /* 載入畫面與錯誤提示 */
         #loading {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: white; font-size: 16px; text-align: center; width: 80%;
-            z-index: 50;
+            color: white; font-size: 16px; text-align: center; width: 80%; z-index: 50;
         }
         #error-msg {
             color: #ff4444; margin-top: 10px; font-size: 14px; display: none; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px;
         }
 
-        /* 按鈕樣式 */
         .btn-group { display: flex; gap: 15px; margin-top: 30px; }
         button {
             padding: 12px 24px; border-radius: 50px; font-size: 16px; font-weight: bold;
@@ -113,7 +112,7 @@
         
         <div id="success-layer">
             <h1 style="font-size: 30px; margin: 0;">☀️</h1>
-            <h2 style="margin-top: 20px;">Just Smile 😊</h2>
+            <h2 style="margin-top: 20px;">你就是自己的太陽</h2>
 
             <div class="btn-group">
                 <button class="btn-restart" onclick="restartGame()">
@@ -127,8 +126,8 @@
     </div>
 
 <script>
-    // --- 全域錯誤捕捉 (顯示在螢幕上方便手機除錯) ---
-    window.onerror = function(message, source, lineno, colno, error) {
+    // 錯誤處理
+    window.onerror = function(message) {
         const errorDiv = document.getElementById('error-msg');
         errorDiv.style.display = 'block';
         errorDiv.innerText = "發生錯誤:\n" + message;
@@ -148,7 +147,6 @@
     let gameWon = false;
     let isCameraRunning = false;
 
-    // RWD Canvas 調整
     function resizeCanvas() {
         canvasElement.width = window.innerWidth;
         canvasElement.height = window.innerHeight;
@@ -156,7 +154,7 @@
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
-    // 初始化 MediaPipe FaceMesh
+    // MediaPipe
     let faceMesh;
     try {
         faceMesh = new FaceMesh({locateFile: (file) => 
@@ -179,9 +177,8 @@
     // 啟動相機
     async function startCamera() {
         try {
-            // 檢查是否為 HTTPS (本地開發 localhost 除外)
             if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-                throw new Error("請使用 HTTPS 安全連線，否則無法開啟相機");
+                throw new Error("請使用 HTTPS 安全連線");
             }
 
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -189,17 +186,16 @@
             });
             videoElement.srcObject = stream;
             
-            // 確保影片載入後才開始處理
             videoElement.onloadedmetadata = () => {
                 videoElement.play();
                 isCameraRunning = true;
-                loadingDiv.style.display = 'none'; // 隱藏載入文字
+                loadingDiv.style.display = 'none';
                 processVideo();
             };
         } catch (e) {
             const errorDiv = document.getElementById('error-msg');
             errorDiv.style.display = 'block';
-            errorDiv.innerText = "相機錯誤: " + e.message + "\n(請確認已允許權限)";
+            errorDiv.innerText = "相機錯誤: " + e.message;
         }
     }
 
@@ -207,19 +203,16 @@
         if(!isCameraRunning) return;
         try {
             await faceMesh.send({image: videoElement});
-        } catch(e) {
-            console.error(e);
-        }
+        } catch(e) { console.error(e); }
         requestAnimationFrame(processVideo);
     }
 
-    // 核心邏輯
+    // 核心繪圖與邏輯
     function onResults(results) {
-        // 1. 繪製畫面
         canvasCtx.save();
         canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-        // 保持比例填滿 (Cover Mode)
+        // 保持比例填滿
         const vRatio = videoElement.videoWidth / videoElement.videoHeight;
         const cRatio = canvasElement.width / canvasElement.height;
         let drawW, drawH, startX, startY;
@@ -236,31 +229,30 @@
             startY = 0;
         }
 
-        // 鏡像翻轉
+        // --- 這裡負責鏡像翻轉 ---
+        // 1. 移動原點到最右邊
         canvasCtx.translate(canvasElement.width, 0);
+        // 2. X軸翻轉
         canvasCtx.scale(-1, 1);
+        // 3. 繪製
         canvasCtx.drawImage(results.image, -startX, startY, drawW, drawH);
         
-        // 2. 遊戲邏輯
         if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
             const landmarks = results.multiFaceLandmarks[0];
             const isSmiling = detectSmileStrict(landmarks);
 
             if (!gameWon) {
                 if (isSmiling) {
-                    // 1分鐘挑戰 (+0.06)
-                    smileScore += 0.06; 
+                    smileScore += 0.06; // 上升速度
                     
-                    // --- 文字輪播邏輯 ---
+                    // 文字輪播
                     if (Date.now() % 4000 < 2000) {
                         statusText.innerText = `充電中... ${Math.floor(smileScore)}%`;
                     } else {
-                        statusText.innerText = `你笑起來真好看 ${Math.floor(smileScore)}%`;
+                        statusText.innerText = `你笑起來真好看！ ${Math.floor(smileScore)}%`;
                     }
-
                 } else {
-                    // 緩慢下降
-                    smileScore -= 0.1; 
+                    smileScore -= 0.1; // 下降速度
                     statusText.innerText = "請保持微笑！";
                 }
 
@@ -269,14 +261,12 @@
                     smileScore = 100;
                     triggerWin();
                 }
-                
                 progressBar.style.width = smileScore + "%";
             }
         }
         canvasCtx.restore();
     }
 
-    // 嚴格微笑偵測
     function detectSmileStrict(landmarks) {
         const mouthLeft = landmarks[61];
         const mouthRight = landmarks[291];
@@ -287,8 +277,6 @@
         const faceWidth = Math.hypot(eyeLeft.x - eyeRight.x, eyeLeft.y - eyeRight.y);
 
         const widthRatio = mouthWidth / faceWidth;
-        
-        // 判定標準
         return (widthRatio > 0.60); 
     }
 
@@ -297,7 +285,6 @@
         successLayer.style.display = 'flex';
         uiLayer.style.display = 'none';
 
-        // 彩帶特效
         const duration = 5000;
         const end = Date.now() + duration;
         (function frame() {
@@ -307,7 +294,6 @@
         }());
     }
 
-    // 重新開始
     function restartGame() {
         smileScore = 0;
         gameWon = false;
@@ -317,12 +303,11 @@
         statusText.innerText = "😐 準備好微笑";
     }
 
-    // 分享功能
     async function shareGame() {
         const shareUrl = window.location.href; 
         const shareData = {
             title: '微笑挑戰 🙂',
-            text: '一起來微笑',
+            text: '笑一個吧',
             url: shareUrl
         };
         try {
@@ -332,9 +317,7 @@
                 await navigator.clipboard.writeText(shareUrl);
                 alert("連結已複製！");
             }
-        } catch (err) {
-            console.log("分享取消");
-        }
+        } catch (err) { console.log("分享取消"); }
     }
 
     startCamera();
