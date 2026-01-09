@@ -12,42 +12,34 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     
     <style>
-        /* CSS Reset & 基礎設定 */
         body { margin: 0; padding: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
-        
         #container { position: relative; width: 100vw; height: 100vh; }
         
         /* 隱藏原始影片，只顯示 Canvas */
         video { position: absolute; opacity: 0; width: 1px; height: 1px; }
         
-        /* Canvas 填滿螢幕 */
+        /* Canvas 填滿螢幕 + 鏡像 */
         canvas { 
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
             object-fit: cover; 
-            transform: scaleX(-1); /* CSS 視覺層鏡像 */
+            transform: scaleX(-1);
         }
 
-        /* UI 層：依據你的要求設定在下方 (80vh) */
+        /* UI 層設定在下方 */
         #ui-layer {
-            position: absolute; 
-            top: 0; 
-            left: 0; 
-            width: 100%; 
-            height: 100%;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             pointer-events: none;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: flex-start; 
-            padding-top: 80vh; /* 這是你設定的位置 */
+            padding-top: 80vh; /* 位置設定 */
             box-sizing: border-box;
             z-index: 10;
         }
 
-        /* 進度條容器 */
         .bar-container {
-            width: 80%;
-            height: 24px;
+            width: 80%; height: 24px;
             background: rgba(0, 0, 0, 0.5);
             border-radius: 12px;
             border: 2px solid rgba(255, 255, 255, 0.8);
@@ -56,76 +48,48 @@
             margin-bottom: 10px;
         }
 
-        /* 進度條本體 */
         #progress-bar {
-            width: 0%;
-            height: 100%;
+            width: 0%; height: 100%;
             background: linear-gradient(90deg, #FDBB2D 0%, #22C1C3 100%);
             transition: width 0.1s linear;
         }
 
-        /* 文字狀態 */
         #status-text {
-            color: white;
-            font-size: 20px;
-            font-weight: bold;
+            color: white; font-size: 20px; font-weight: bold;
             text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-            letter-spacing: 1px;
-            margin-bottom: 5px;
+            letter-spacing: 1px; margin-bottom: 5px;
+            text-align: center;
+            min-height: 24px; /* 防止文字跳動 */
         }
 
-        /* 勝利訊息 */
         #success-layer {
             display: none;
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.6);
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 20;
-            color: white;
-            text-align: center;
+            flex-direction: column; align-items: center; justify-content: center;
+            z-index: 20; color: white; text-align: center;
         }
 
+        /* 載入畫面與錯誤提示 */
         #loading {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: white; font-size: 16px;
+            color: white; font-size: 16px; text-align: center; width: 80%;
+            z-index: 50;
+        }
+        #error-msg {
+            color: #ff4444; margin-top: 10px; font-size: 14px; display: none; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px;
         }
 
-        /* --- 新增：按鈕樣式 --- */
-        .btn-group {
-            display: flex;
-            gap: 15px;
-            margin-top: 30px;
-        }
-
+        /* 按鈕樣式 */
+        .btn-group { display: flex; gap: 15px; margin-top: 30px; }
         button {
-            padding: 12px 24px;
-            border-radius: 50px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            border: none;
-            transition: transform 0.1s;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            z-index: 30; /* 確保按鈕可以點擊 */
+            padding: 12px 24px; border-radius: 50px; font-size: 16px; font-weight: bold;
+            cursor: pointer; border: none; transition: transform 0.1s;
+            display: flex; align-items: center; gap: 5px; z-index: 30;
         }
-
         button:active { transform: scale(0.95); }
-
-        .btn-restart {
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid white;
-            color: white;
-        }
-
-        .btn-share {
-            background: #FFD700;
-            color: #000;
-            box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
-        }
+        .btn-restart { background: rgba(255, 255, 255, 0.2); border: 2px solid white; color: white; }
+        .btn-share { background: #FFD700; color: #000; box-shadow: 0 0 15px rgba(255, 215, 0, 0.5); }
     </style>
 </head>
 <body>
@@ -134,7 +98,11 @@
         <video id="input-video" playsinline webkit-playsinline muted autoplay></video>
         <canvas id="output-canvas"></canvas>
         
-        <div id="loading">啟動相機中...</div>
+        <div id="loading">
+            啟動相機中...<br>
+            <span style="font-size:12px; color:#aaa;">(請允許相機權限)</span>
+            <div id="error-msg"></div>
+        </div>
 
         <div id="ui-layer">
             <div id="status-text">😐 等待微笑...</div>
@@ -159,6 +127,14 @@
     </div>
 
 <script>
+    // --- 全域錯誤捕捉 (顯示在螢幕上方便手機除錯) ---
+    window.onerror = function(message, source, lineno, colno, error) {
+        const errorDiv = document.getElementById('error-msg');
+        errorDiv.style.display = 'block';
+        errorDiv.innerText = "發生錯誤:\n" + message;
+        return false;
+    };
+
     const videoElement = document.getElementById('input-video');
     const canvasElement = document.getElementById('output-canvas');
     const canvasCtx = canvasElement.getContext('2d');
@@ -180,42 +156,60 @@
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
-    // MediaPipe 設定
-    const faceMesh = new FaceMesh({locateFile: (file) => 
-        `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
-    });
+    // 初始化 MediaPipe FaceMesh
+    let faceMesh;
+    try {
+        faceMesh = new FaceMesh({locateFile: (file) => 
+            `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+        });
 
-    faceMesh.setOptions({
-        maxNumFaces: 1,
-        refineLandmarks: true,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
-    });
+        faceMesh.setOptions({
+            maxNumFaces: 1,
+            refineLandmarks: true,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
 
-    faceMesh.onResults(onResults);
+        faceMesh.onResults(onResults);
+    } catch (e) {
+        document.getElementById('error-msg').style.display = 'block';
+        document.getElementById('error-msg').innerText = "模型載入失敗: " + e.message;
+    }
 
     // 啟動相機
     async function startCamera() {
         try {
+            // 檢查是否為 HTTPS (本地開發 localhost 除外)
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                throw new Error("請使用 HTTPS 安全連線，否則無法開啟相機");
+            }
+
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: 'user', width: {ideal: 1280}, height: {ideal: 720} }
             });
             videoElement.srcObject = stream;
+            
+            // 確保影片載入後才開始處理
             videoElement.onloadedmetadata = () => {
                 videoElement.play();
                 isCameraRunning = true;
-                loadingDiv.style.display = 'none';
+                loadingDiv.style.display = 'none'; // 隱藏載入文字
                 processVideo();
             };
         } catch (e) {
-            loadingDiv.innerText = "無法開啟相機，請檢查權限";
-            alert("相機開啟失敗：" + e.message);
+            const errorDiv = document.getElementById('error-msg');
+            errorDiv.style.display = 'block';
+            errorDiv.innerText = "相機錯誤: " + e.message + "\n(請確認已允許權限)";
         }
     }
 
     async function processVideo() {
         if(!isCameraRunning) return;
-        await faceMesh.send({image: videoElement});
+        try {
+            await faceMesh.send({image: videoElement});
+        } catch(e) {
+            console.error(e);
+        }
         requestAnimationFrame(processVideo);
     }
 
@@ -242,7 +236,7 @@
             startY = 0;
         }
 
-        // 這裡只需要一次鏡像翻轉
+        // 鏡像翻轉
         canvasCtx.translate(canvasElement.width, 0);
         canvasCtx.scale(-1, 1);
         canvasCtx.drawImage(results.image, -startX, startY, drawW, drawH);
@@ -252,22 +246,20 @@
             const landmarks = results.multiFaceLandmarks[0];
             const isSmiling = detectSmileStrict(landmarks);
 
-            if (isSmiling) {
-                    // 1分鐘挑戰
+            if (!gameWon) {
+                if (isSmiling) {
+                    // 1分鐘挑戰 (+0.06)
                     smileScore += 0.06; 
                     
-                    // --- 修改開始：讓文字輪流切換 ---
-                    // 設定 4000 毫秒 (4秒) 為一個循環
-                    // 前 2 秒顯示 "充電中"，後 2 秒顯示 "你笑起來真好看"
+                    // --- 文字輪播邏輯 ---
                     if (Date.now() % 4000 < 2000) {
                         statusText.innerText = `充電中... ${Math.floor(smileScore)}%`;
                     } else {
                         statusText.innerText = `你笑起來真好看 ${Math.floor(smileScore)}%`;
                     }
-                    // --- 修改結束 ---
 
                 } else {
-                    // 緩慢下降 (依你的要求設為 0.1)
+                    // 緩慢下降
                     smileScore -= 0.1; 
                     statusText.innerText = "請保持微笑！";
                 }
@@ -294,21 +286,16 @@
         const eyeRight = landmarks[263];
         const faceWidth = Math.hypot(eyeLeft.x - eyeRight.x, eyeLeft.y - eyeRight.y);
 
-        const lipTop = landmarks[13];
-        const lipBottom = landmarks[14];
-        const mouthOpen = Math.hypot(lipTop.x - lipBottom.x, lipTop.y - lipBottom.y);
-
         const widthRatio = mouthWidth / faceWidth;
-        const openRatio = mouthOpen / faceWidth;
-
-        // 嚴格判定
+        
+        // 判定標準
         return (widthRatio > 0.60); 
     }
 
     function triggerWin() {
         gameWon = true;
         successLayer.style.display = 'flex';
-        uiLayer.style.display = 'none'; // 隱藏遊戲UI
+        uiLayer.style.display = 'none';
 
         // 彩帶特效
         const duration = 5000;
@@ -320,32 +307,24 @@
         }());
     }
 
-    // --- 新增的功能函數 ---
-
-    // 1. 重新開始
+    // 重新開始
     function restartGame() {
         smileScore = 0;
         gameWon = false;
-        
         successLayer.style.display = 'none';
-        uiLayer.style.display = 'flex'; // 顯示遊戲UI
-        
+        uiLayer.style.display = 'flex';
         progressBar.style.width = "0%";
         statusText.innerText = "😐 準備好微笑";
     }
 
-    // 2. 分享功能
+    // 分享功能
     async function shareGame() {
-        // !!! 注意 !!!
-        // 當你有 Reels 連結後，請回來把下面這行改成：
-        // const shareUrl = 'https://www.instagram.com/reel/你的影片ID';
-        const shareUrl = window.location.href; // 目前先分享這個網頁自己
-
+        const shareUrl = window.location.href; 
         const shareData = {
             title: '微笑挑戰 🙂',
+            text: '一起來微笑',
             url: shareUrl
         };
-
         try {
             if (navigator.share) {
                 await navigator.share(shareData);
