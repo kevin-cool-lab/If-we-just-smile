@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>微笑挑戰 🙂</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #000; font-family: 'Arial', sans-serif; }
+        
+        /* 影片與畫布層疊 */
+        #container { position: relative; width: 100vw; height: 100vh; }
+        video { display: none; }
+        canvas { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            transform: scaleX(-1); /* 鏡像翻轉 */
+        }
+
+        /* UI 介面 */
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end; /* 放在下方 */
+            padding-bottom: 50px;
+        }
+
+        /* 進度條容器 */
+        .bar-container {
+            width: 80%;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 20px;
+            border: 3px solid white;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        /* 進度條本體 */
+        #progress-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #ff9a9e 0%, #fecfef 99%, #f6d365 100%);
+            transition: width 0.1s linear;
+        }
+
+        /* 文字提示 */
+        #status-text {
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            text-align: center;
+        }
+
+        /* 成功訊息 */
+        #success-msg {
+            display: none;
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 50px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 0 20px #ff00cc;
+            text-align: center;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="container">
+        <video id="input-video" playsinline></video>
+        <canvas id="output-canvas"></canvas>
+        
+        <div id="ui-layer">
+            <div id="status-text">請保持微笑！加油！😁</div>
+            <div class="bar-container">
+                <div id="progress-bar"></div>
+            </div>
+        </div>
+        
+        <div id="success-msg">
+            ✨ 挑戰成功 ✨<br>
+            <span style="font-size: 20px;">心情有沒有變好一點？</span>
+        </div>
+    </div>
+
+<script>
+    const videoElement = document.getElementById('input-video');
+    const canvasElement = document.getElementById('output-canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const progressBar = document.getElementById('progress-bar');
+    const statusText = document.getElementById('status-text');
+    const successMsg = document.getElementById('success-msg');
+
+    let smileScore = 0; // 0 到 100
+    let gameWon = false;
+
+    // 調整畫布大小
+    function resizeCanvas() {
+        canvasElement.width = window.innerWidth;
+        canvasElement.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // MediaPipe Face Mesh 設定
+    const faceMesh = new FaceMesh({locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+    }});
+
+    faceMesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+    });
+
+    faceMesh.onResults(onResults);
+
+    const camera = new Camera(videoElement, {
+        onFrame: async () => {
+            await faceMesh.send({image: videoElement});
+        },
+        width: 1280,
+        height: 720
+    });
+    camera.start();
+
+    // 核心邏輯
+    function onResults(results) {
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        
+        // 繪製影像 (鏡像)
+        canvasCtx.translate(canvasElement.width, 0);
+        canvasCtx.scale(-1, 1);
+        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+        
+        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+            const landmarks = results.multiFaceLandmarks[0];
+            
+            // 判斷是否微笑
+            const isSmiling = detectSmile(landmarks);
+
+            // 遊戲邏輯 (只有沒贏的時候才跑)
+            if (!gameWon) {
+                if (isSmiling) {
+                    smileScore += 0.4; // 增加速度 (可以調整)
+                    statusText.innerText = "😁 很好！繼續保持！";
+                } else {
+                    smileScore -= 2.0; // 掉落速度 (可以調整，設快一點比較刺激)
+                    statusText.innerText = "😐 不要停！笑起來！";
+                }
+
+                // 限制範圍 0-100
+                if (smileScore < 0) smileScore = 0;
+                if (smileScore > 100) {
+                    smileScore = 100;
+                    triggerWin();
+                }
+
+                // 更新 UI
+                progressBar.style.width = smileScore + "%";
+            }
+        } else {
+            // 沒偵測到臉
+            statusText.innerText = "👀 找不到你的臉...";
+        }
+
+        canvasCtx.restore();
+    }
+
+    // 微笑偵測演算法
+    function detectSmile(landmarks) {
+        // 嘴臉關鍵點索引 (MediaPipe 468 landmarks)
+        const leftMouthCorner = landmarks[61];
+        const rightMouthCorner = landmarks[291];
+        const topLip = landmarks[13];
+        const bottomLip = landmarks[14];
+        
+        // 眼距 (用來當作比例尺，避免臉遠近影響判斷)
+        const leftEye = landmarks[33];
+        const rightEye = landmarks[263];
+        const faceWidth = Math.hypot(leftEye.x - rightEye.x, leftEye.y - rightEye.y);
+
+        // 計算嘴巴寬度
+        const mouthWidth = Math.hypot(leftMouthCorner.x - rightMouthCorner.x, leftMouthCorner.y - rightMouthCorner.y);
+
+        // 微笑比率 (嘴寬 / 臉寬)
+        // 一般無表情大約 0.35-0.4，微笑通常 > 0.45 或 0.5
+        const smileRatio = mouthWidth / faceWidth;
+
+        // 閾值 (你可以微調這個數字，越小越容易判定微笑)
+        const THRESHOLD = 0.55; 
+
+        return smileRatio > THRESHOLD;
+    }
+
+    // 勝利特效
+    function triggerWin() {
+        gameWon = true;
+        statusText.innerText = "";
+        successMsg.style.display = "block";
+        
+        // 發射彩帶
+        var duration = 3 * 1000;
+        var end = Date.now() + duration;
+
+        (function frame() {
+            confetti({
+                particleCount: 5,
+                angle: 60,
+                spread: 55,
+                origin: { x: 0 }
+            });
+            confetti({
+                particleCount: 5,
+                angle: 120,
+                spread: 55,
+                origin: { x: 1 }
+            });
+
+            if (Date.now() < end) {
+                requestAnimationFrame(frame);
+            }
+        }());
+    }
+</script>
+</body>
+</html>
